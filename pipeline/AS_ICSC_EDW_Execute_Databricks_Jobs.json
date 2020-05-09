@@ -1,0 +1,189 @@
+{
+	"name": "AS_ICSC_EDW_Execute_Databricks_Jobs",
+	"properties": {
+		"activities": [
+			{
+				"name": "Execute Lookups",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Assign BatchId to Variable",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true,
+					"parameters": {
+						"BatchId": {
+							"value": "@variables('BatchId')",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "Execute Dimensions",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Execute Lookups",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true,
+					"parameters": {
+						"BatchId": {
+							"value": "@variables('BatchId')",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "Execute Facts",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Execute Dimensions",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true,
+					"parameters": {
+						"BatchId": {
+							"value": "@variables('BatchId')",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "Get BatchId",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": "SELECT convert(nvarchar(4),isnull(max(BatchID)+1,1)) as BatchID from [dbo].EntityIngestionJobsDetail"
+					}
+				}
+			},
+			{
+				"name": "Assign BatchId to Variable",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "Get BatchId",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "BatchId",
+					"value": {
+						"value": "@activity('Get BatchId').output.firstRow.BatchID",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "Execute Lookups To STG",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Truncate STG",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Truncate STG",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "Execute Lookups",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[dbo].[Sp_TruncateSTG]"
+				}
+			},
+			{
+				"name": "Execute Dimensions To STG",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Execute Dimensions",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Execute Facts To STG",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Execute Facts",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			}
+		],
+		"variables": {
+			"BatchId": {
+				"type": "String"
+			}
+		},
+		"annotations": []
+	}
+}

@@ -1,0 +1,150 @@
+{
+	"name": "AS_ICSC_Master_Pipeline",
+	"properties": {
+		"activities": [
+			{
+				"name": "BYOD_To_LandingZone",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "AS_ICSC_Ingest_To_ADL_D365_FINOPS",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "CheckEntityFailCount",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "BYOD_To_LandingZone",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": "select convert(nvarchar(4),count(1)) as FailedCount from dbo.EntityIngestionJobHeader\nwhere IsFileGenerated = 0\nand IsActive = 1\nand sourcesystem in ('D365-FINOPS','D365-CE') and JobType = 'Ingestion' and EntityNumber<>285",
+						"queryTimeout": "02:00:00"
+					}
+				}
+			},
+			{
+				"name": "Set Failed Count",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "CheckEntityFailCount",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "EntityFailCount",
+					"value": {
+						"value": "@activity('CheckEntityFailCount').output.firstRow.FailedCount",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "Execute Spark Job based upon Ingestion Job Result",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "Set Failed Count",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(variables('EntityFailCount'),'0')",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "Wait on Fail",
+							"type": "Wait",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"waitTimeInSeconds": 10
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "CSV_To_Parquet_Curated_Zone",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"waitOnCompletion": true
+							}
+						},
+						{
+							"name": "Transformation_Curated_To_Serving",
+							"type": "ExecutePipeline",
+							"dependsOn": [
+								{
+									"activity": "CSV_To_Parquet_Curated_Zone",
+									"dependencyConditions": [
+										"Completed"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "AS_ICSC_EDW_Execute_Databricks_Jobs",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true
+							}
+						},
+						{
+							"name": "Load_To_DWH",
+							"type": "ExecutePipeline",
+							"dependsOn": [
+								{
+									"activity": "Transformation_Curated_To_Serving",
+									"dependencyConditions": [
+										"Completed"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"waitOnCompletion": true
+							}
+						}
+					]
+				}
+			}
+		],
+		"variables": {
+			"EntityFailCount": {
+				"type": "String"
+			}
+		},
+		"annotations": []
+	}
+}

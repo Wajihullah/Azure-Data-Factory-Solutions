@@ -1,0 +1,153 @@
+{
+	"name": "CE Testing",
+	"properties": {
+		"activities": [
+			{
+				"name": "Ingest to ADL",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "AS_ICSC_Ingest_To_ADL_D365_FINOPS",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Make Parquet",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Ingest to ADL",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Execute Dimensions To Serving",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Make Parquet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Execute Facts To Serving",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Execute Dimensions To Serving",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Load Dimension To STG",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Truncate CE Tables",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Load Fact To STG",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Truncate CE Tables",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Truncate CE Tables",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "Execute Facts To Serving",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[dbo].[SP_TruncateSTG_CE_Testing]"
+				}
+			},
+			{
+				"name": "Load to DB Tables",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "Load Dimension To STG",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "Load Fact To STG",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[dbo].[SP_LoadAllDataSTGtoEDW_Testing]"
+				}
+			}
+		],
+		"annotations": []
+	}
+}

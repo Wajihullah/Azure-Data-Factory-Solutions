@@ -1,0 +1,188 @@
+{
+	"name": "AS_ICSC_Master_Pipeline_LegacySource",
+	"properties": {
+		"activities": [
+			{
+				"name": "Load_QVD_To_CuratedZone",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Load_IMIS_To_CuratedZone",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Load_QVD_To_CuratedZone",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Load_QVD_Dimensions_To_STG",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Truncate STGs for QVDs",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "AS_ICSC_Load_QVD_Dimensions",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Load_IMIS_Dimensions_To_STG",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Truncate STGs for IMIS",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "AS_ICSC_Load_IMIS_Dimensions",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Load_IMIS_Facts_To_STG",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Load_IMIS_Dimensions_To_STG",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "AS_ICSC_Load_IMIS_Facts",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Load_DWH_IMIS",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Load_IMIS_Facts_To_STG",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Load_DWH_QVD",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Load_QVD_Dimensions_To_STG",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Truncate STGs for IMIS",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "Load_IMIS_To_CuratedZone",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[dbo].[SP_TruncateSTG_IMIS]",
+					"storedProcedureParameters": {
+						"Process_ID": {
+							"value": "999",
+							"type": "Int32"
+						}
+					}
+				}
+			},
+			{
+				"name": "Truncate STGs for QVDs",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "Load_IMIS_To_CuratedZone",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[dbo].[SP_TruncateSTG_QVD]",
+					"storedProcedureParameters": {
+						"Process_ID": {
+							"value": "999",
+							"type": "Int32"
+						}
+					}
+				}
+			}
+		],
+		"variables": {
+			"EntityFailCount": {
+				"type": "String"
+			}
+		},
+		"annotations": []
+	}
+}

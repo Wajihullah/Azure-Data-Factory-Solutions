@@ -1,0 +1,33 @@
+{
+	"name": "AS_ICSC_Load_IMIS_Facts",
+	"properties": {
+		"activities": [
+			{
+				"name": "Create_dimension_on_ServingZone",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "ServingZone_to_DWH_StagingTables",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Create_dimension_on_ServingZone",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			}
+		],
+		"annotations": []
+	}
+}

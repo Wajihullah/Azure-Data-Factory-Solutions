@@ -1,0 +1,809 @@
+{
+	"name": "AS_ICSC_Ingest_To_ADL_D365_FINOPS",
+	"properties": {
+		"activities": [
+			{
+				"name": "Load Entities to Process",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Update Processing Date",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": "select EntityNumber,EntityName,SRCQuery,LandingZoneStagingPath,LandingZoneArchivedPath,CuratedZonePath,DataProcessDate,ExecutionDate,LastRefreshField,AllowIterations,IterationSize\nfrom [dbo].[EntityIngestionJobHeader]\nwhere IsActive = 1 and sourcesystem in ('D365-FINOPS') and JobType = 'Ingestion' and EntityNumber<>285"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "Iterate and generate each Entity File",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Load Entities to Process",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Load Entities to Process').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 50,
+					"activities": [
+						{
+							"name": "CSVFile",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "Insert Detail Row",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlServerSource",
+									"sqlReaderQuery": {
+										"value": "@concat(item().SRCQuery, ' where ' , item().LastRefreshField, ' > ''' , item().DataProcessDate ,'''', 'and ' ,  item().LastRefreshField ,' <= ''', item().ExecutionDate,'''')",
+										"type": "Expression"
+									}
+								},
+								"sink": {
+									"type": "DelimitedTextSink",
+									"storeSettings": {
+										"type": "AzureDataLakeStoreWriteSettings"
+									},
+									"formatSettings": {
+										"type": "DelimitedTextWriteSettings",
+										"quoteAllText": true,
+										"fileExtension": ".csv"
+									}
+								},
+								"enableStaging": false,
+								"enableSkipIncompatibleRow": true
+							}
+						},
+						{
+							"name": "Insert Detail Row",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[Sp_InsertConfigRow]",
+								"storedProcedureParameters": {
+									"EntityNumber": {
+										"value": {
+											"value": "@item().EntityNumber",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"FileName": {
+										"value": {
+											"value": "@item().EntityName",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"BatchID": {
+										"value": {
+											"value": "@variables('BatchId')",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							}
+						},
+						{
+							"name": "Update Detail Row after Success",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [
+								{
+									"activity": "CSVFile",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[Sp_UpdateConfigRow]",
+								"storedProcedureParameters": {
+									"EntityNumber": {
+										"value": {
+											"value": "@item().EntityNumber",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"Error": {
+										"value": {
+											"value": "File Generated Successfully",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"FileName": {
+										"value": {
+											"value": "@item().EntityName",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"RowCount": {
+										"value": {
+											"value": "@activity('CSVFile').output.rowsRead",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"Status": {
+										"value": {
+											"value": "@activity('CSVFile').output.executionDetails[0].status",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"ParquetRowCount": {
+										"value": {
+											"value": "@activity('CSVFile').output.rowsCopied",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							}
+						},
+						{
+							"name": "Update Detail Row after Fail",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [
+								{
+									"activity": "CSVFile",
+									"dependencyConditions": [
+										"Failed"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[Sp_UpdateConfigRowAfterFail]",
+								"storedProcedureParameters": {
+									"Error": {
+										"value": {
+											"value": "@replace(activity('CSVFile').error.message,'''',' ')",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"FileName": {
+										"value": {
+											"value": "@item().EntityName",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"Status": {
+										"value": {
+											"value": "@activity('CSVFile').output.executionDetails[0].status",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "Update Processing Date",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Exec SP Load Retail Hierarchy",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true,
+					"parameters": {
+						"LoadType": {
+							"value": "@pipeline().parameters.LoadType",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "Update Process Date after ETL",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Iterate and generate each Entity File",
+						"dependencyConditions": [
+							"Completed"
+						]
+					},
+					{
+						"activity": "Iterate and generate each Entity File CE",
+						"dependencyConditions": [
+							"Completed"
+						]
+					},
+					{
+						"activity": "Iterate and generate each Entity File CE_copy1",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Move Files to Landing Archived",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Update Process Date after ETL",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Exec SP Load Retail Hierarchy",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "Assign BatchId to Variable",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[dbo].[SP_LoadRetailHierarchy_BYOD]"
+				}
+			},
+			{
+				"name": "Get BatchId",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": "SELECT convert(nvarchar(10),isnull(max(BatchID)+1,1)) as BatchID from [dbo].EntityIngestionJobsDetail"
+					}
+				}
+			},
+			{
+				"name": "Assign BatchId to Variable",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "Get BatchId",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "BatchId",
+					"value": {
+						"value": "@activity('Get BatchId').output.firstRow.BatchID",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "Load CE Entities",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Update Processing Date",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": "select EntityNumber,EntityName,JsonQuery,replace(SRCQuery, 'vsi_lastrefreshfieldvalue', replace(replace(convert(varchar,dataprocessdate, 25), '.000', 'Z'), ' ', 'T')) as SRCQuery\n,LandingZoneStagingPath,LandingZoneArchivedPath,CuratedZonePath,DataProcessDate,ExecutionDate,LastRefreshField,AllowIterations,IterationSize\nfrom [dbo].[EntityIngestionJobHeader]\nwhere IsActive = 1 and sourcesystem in ('D365-CE') and JobType in ('Ingestion','SoftDeletion') and EntityNumber <> 285 and AllowIterations = 'No'"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "Iterate and generate each Entity File CE",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Load CE Entities",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Load CE Entities').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 50,
+					"activities": [
+						{
+							"name": "CSVFileCE",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "Insert Detail Row CE",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "DynamicsCrmSource",
+									"query": {
+										"value": "@item().SRCQuery",
+										"type": "Expression"
+									}
+								},
+								"sink": {
+									"type": "DelimitedTextSink",
+									"storeSettings": {
+										"type": "AzureDataLakeStoreWriteSettings"
+									},
+									"formatSettings": {
+										"type": "DelimitedTextWriteSettings",
+										"quoteAllText": true,
+										"fileExtension": ".csv"
+									}
+								},
+								"enableStaging": false,
+								"enableSkipIncompatibleRow": true,
+								"translator": {
+									"value": "@if(equals(item().JsonQuery,NULL),'',json(item().JsonQuery))",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "Insert Detail Row CE",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[Sp_InsertConfigRow]",
+								"storedProcedureParameters": {
+									"EntityNumber": {
+										"value": {
+											"value": "@item().EntityNumber",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"FileName": {
+										"value": {
+											"value": "@item().EntityName",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"BatchID": {
+										"value": {
+											"value": "@variables('BatchId')",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							}
+						},
+						{
+							"name": "Update Detail Row after Success CE",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [
+								{
+									"activity": "CSVFileCE",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[Sp_UpdateConfigRow]",
+								"storedProcedureParameters": {
+									"EntityNumber": {
+										"value": {
+											"value": "@item().EntityNumber",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"Error": {
+										"value": {
+											"value": "File Generated Successfully",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"FileName": {
+										"value": {
+											"value": "@item().EntityName",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"RowCount": {
+										"value": {
+											"value": "@activity('CSVFileCE').output.rowsRead",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"Status": {
+										"value": {
+											"value": "@activity('CSVFileCE').output.executionDetails[0].status",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"ParquetRowCount": {
+										"value": {
+											"value": "@activity('CSVFileCE').output.rowsCopied",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							}
+						},
+						{
+							"name": "Update Detail Row after Fail CE",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [
+								{
+									"activity": "CSVFileCE",
+									"dependencyConditions": [
+										"Failed"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[Sp_UpdateConfigRowAfterFail]",
+								"storedProcedureParameters": {
+									"Error": {
+										"value": {
+											"value": "@replace(activity('CSVFileCE').error.message,'''',' ')",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"FileName": {
+										"value": {
+											"value": "@item().EntityName",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"Status": {
+										"value": {
+											"value": "@activity('CSVFileCE').output.executionDetails[0].status",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "Load CE Iteration Entities",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Update Processing Date",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": "select EntityNumber, JsonQuery, EntityName,replace(SRCQuery, 'vsi_lastrefreshfieldvalue', replace(replace(convert(varchar,dataprocessdate, 25), '.000', 'Z'), ' ', 'T')) as SRCQuery\n,LandingZoneStagingPath,LandingZoneArchivedPath,CuratedZonePath,DataProcessDate,ExecutionDate,LastRefreshField,AllowIterations,IterationSize, IterationKey\nfrom [dbo].[EntityIngestionJobHeader]\nwhere IsActive = 1 and sourcesystem in ('D365-CE') and JobType = 'Ingestion' and AllowIterations = 'Yes'"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "Iterate and generate each Entity File CE_copy1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Load CE Iteration Entities",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Load CE Iteration Entities').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 50,
+					"activities": [
+						{
+							"name": "Insert Detail Row CE_copy1",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[Sp_InsertConfigRow]",
+								"storedProcedureParameters": {
+									"EntityNumber": {
+										"value": {
+											"value": "@item().EntityNumber",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"FileName": {
+										"value": {
+											"value": "@item().EntityName",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"BatchID": {
+										"value": {
+											"value": "@variables('BatchId')",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							}
+						},
+						{
+							"name": "Load Incremental_copy1",
+							"type": "ExecutePipeline",
+							"dependsOn": [
+								{
+									"activity": "Insert Detail Row CE_copy1",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"waitOnCompletion": true,
+								"parameters": {
+									"SRCQuery": {
+										"value": "@item().SRCQuery",
+										"type": "Expression"
+									},
+									"FilePath": {
+										"value": "@concat('adl://dlacuitysparkicsc.azuredatalakestore.net',item().LandingZoneStagingPath)",
+										"type": "Expression"
+									},
+									"DataProcessDate": {
+										"value": "@item().DataProcessDate",
+										"type": "Expression"
+									},
+									"IterationSize": {
+										"value": "@string(item().IterationSize)",
+										"type": "Expression"
+									},
+									"IterationKey": {
+										"value": "@item().IterationKey",
+										"type": "Expression"
+									},
+									"LoadType": {
+										"value": "@pipeline().parameters.LoadType",
+										"type": "Expression"
+									},
+									"EntityName": {
+										"value": "@item().EntityName",
+										"type": "Expression"
+									},
+									"LandingZonePath": {
+										"value": "@item().LandingZoneStagingPath",
+										"type": "Expression"
+									},
+									"EntityNumber": {
+										"value": "@string(item().EntityNumber)",
+										"type": "Expression"
+									},
+									"JsonQuery": {
+										"value": "@if(equals(item().JsonQuery,NULL),'',json(item().JsonQuery))",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "Delete Remaining Files From Staging",
+				"type": "Delete",
+				"dependsOn": [
+					{
+						"activity": "Move Files to Landing Archived",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"enableLogging": false
+				}
+			}
+		],
+		"parameters": {
+			"LoadType": {
+				"type": "string",
+				"defaultValue": "Full"
+			}
+		},
+		"variables": {
+			"BatchId": {
+				"type": "String"
+			}
+		},
+		"annotations": []
+	}
+}

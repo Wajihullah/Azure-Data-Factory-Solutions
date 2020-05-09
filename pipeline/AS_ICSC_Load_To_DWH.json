@@ -1,0 +1,72 @@
+{
+	"name": "AS_ICSC_Load_To_DWH",
+	"properties": {
+		"activities": [
+			{
+				"name": "Execute Lookups",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Truncate STG",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Execute Dimensions",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Execute Lookups",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Execute Facts",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Execute Dimensions",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Truncate STG",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[dbo].[Sp_TruncateSTG]"
+				}
+			}
+		],
+		"annotations": []
+	}
+}

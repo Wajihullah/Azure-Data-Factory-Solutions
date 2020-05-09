@@ -1,0 +1,159 @@
+{
+	"name": "ICSC_MarketingEvents_MasterPipeline",
+	"properties": {
+		"activities": [
+			{
+				"name": "GAFiles To ADL",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "DataFiles To ADL",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Web Transaction Files To ADL",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "GAFiles CSV to Parquet",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "GAFiles To ADL",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "DataFiles CSV To Parquet",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "DataFiles To ADL",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Web Transaction Files CSV To Parquet",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Web Transaction Files To ADL",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Curated To Serving-Zone",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Wait",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Load Data To EDW",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Curated To Serving-Zone",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "FactMarketingEvents From EDW To Serving",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Load Data To EDW",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Wait",
+				"type": "Wait",
+				"dependsOn": [
+					{
+						"activity": "GAFiles CSV to Parquet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "DataFiles CSV To Parquet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "Web Transaction Files CSV To Parquet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitTimeInSeconds": 60
+				}
+			}
+		],
+		"annotations": []
+	}
+}
