@@ -1,0 +1,90 @@
+{
+	"name": "AS_ICSC_Update_Process_Date_After_ETL",
+	"properties": {
+		"activities": [
+			{
+				"name": "Get Entities to Process",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": "select distinct c.EntityNumber,c.EntityName,c.SRCQuery,c.LandingZoneStagingPath,c.LandingZoneArchivedPath,c.CuratedZonePath,c.DataProcessDate,c.ExecutionDate,c.LastRefreshField\nfrom [dbo].[EntityIngestionJobHeader] c left outer join dbo.EntityIngestionJobsDetail d on c.EntityName = d.EntityName and c.EntityNumber = d.EntityNumber\nwhere c.IsActive = 1 and d.Status = 'Succeeded' and d.SourceRowCount is null and sourcesystem in ('D365-FINOPS', 'D365-CE') and c.JobType in ('Ingestion', 'SoftDeletion') and c.EntityNumber<>285"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "Iterate Through Each Entity",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Get Entities to Process",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Get Entities to Process').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "SP Update Process Date After ETL",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[Sp_UpdateProcessDateAfterETL]",
+								"storedProcedureParameters": {
+									"EntityName": {
+										"value": {
+											"value": "@item().EntityName",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"TABLENAME": {
+										"value": {
+											"value": "@item().EntityName",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"LastRefreshField": {
+										"value": {
+											"value": "@item().LastRefreshField",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"annotations": []
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
