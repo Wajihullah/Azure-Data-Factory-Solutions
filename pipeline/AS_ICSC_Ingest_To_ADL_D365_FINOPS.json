@@ -259,6 +259,10 @@
 				],
 				"userProperties": [],
 				"typeProperties": {
+					"pipeline": {
+						"referenceName": "AS_ICSC_Update_Process_Date",
+						"type": "PipelineReference"
+					},
 					"waitOnCompletion": true,
 					"parameters": {
 						"LoadType": {
@@ -293,6 +297,10 @@
 				],
 				"userProperties": [],
 				"typeProperties": {
+					"pipeline": {
+						"referenceName": "AS_ICSC_Update_Process_Date_After_ETL",
+						"type": "PipelineReference"
+					},
 					"waitOnCompletion": true
 				}
 			},
@@ -309,6 +317,10 @@
 				],
 				"userProperties": [],
 				"typeProperties": {
+					"pipeline": {
+						"referenceName": "AS_ICSC_Move_CSV_From_Pending_To_Archived",
+						"type": "PipelineReference"
+					},
 					"waitOnCompletion": true
 				}
 			},
