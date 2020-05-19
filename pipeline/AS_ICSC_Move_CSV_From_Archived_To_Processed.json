@@ -1,0 +1,102 @@
+{
+	"name": "AS_ICSC_Move_CSV_From_Archived_To_Processed",
+	"properties": {
+		"description": "Move files from one folder to another folder",
+		"activities": [
+			{
+				"name": "Iterate Through Each Entity",
+				"description": "Iterate each file, and move them one by one.",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Load Entities to Move",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Load Entities to Move').output.value",
+						"type": "Expression"
+					},
+					"batchCount": 20,
+					"activities": [
+						{
+							"name": "CopyAFile",
+							"description": "Copy a file from the source store to the destination store.",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureDataLakeStoreSource",
+									"recursive": false
+								},
+								"sink": {
+									"type": "AzureDataLakeStoreSink"
+								},
+								"enableStaging": false,
+								"dataIntegrationUnits": 0
+							}
+						},
+						{
+							"name": "DeleteAFile",
+							"description": "Delete a file from the source store",
+							"type": "Delete",
+							"dependsOn": [
+								{
+									"activity": "CopyAFile",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"enableLogging": false
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "Load Entities to Move",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": "select EntityNumber,EntityName,SRCQuery,LandingZoneStagingPath,LandingZoneArchivedPath,LandingZoneProcessedPath,CuratedZonePath,DataProcessDate,ExecutionDate\nfrom [dbo].[EntityIngestionJobHeader]\nwhere IsActive = 1 and sourcesystem  in ('D365-FINOPS','D365-CE') and IsFileGenerated = 1 and JobType = 'Ingestion' and EntityNumber<>285"
+					},
+					"firstRowOnly": false
+				}
+			}
+		],
+		"annotations": []
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
