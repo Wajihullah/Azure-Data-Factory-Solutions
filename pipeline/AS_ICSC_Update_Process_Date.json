@@ -1,0 +1,102 @@
+{
+	"name": "AS_ICSC_Update_Process_Date",
+	"properties": {
+		"activities": [
+			{
+				"name": "Get Entities to Process",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": "select EntityNumber,EntityName,SRCQuery,LandingZoneStagingPath,LandingZoneArchivedPath,\nCuratedZonePath,DataProcessDate,ExecutionDate, LastRefreshField\nfrom [dbo].[EntityIngestionJobHeader]\nwhere IsActive = 1 and sourcesystem in ('D365-FINOPS','D365-CE') and JobType in ('Ingestion', 'SoftDeletion') and EntityNumber<>285"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "Iterate Through Each Entity",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Get Entities to Process",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Get Entities to Process').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "SP Update Process Date",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[Sp_UpdateProcessDate]",
+								"storedProcedureParameters": {
+									"EntityName": {
+										"value": {
+											"value": "@item().EntityName",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"TABLENAME": {
+										"value": {
+											"value": "@item().EntityName",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"Load": {
+										"value": {
+											"value": "@pipeline().parameters.LoadType",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"LastRefreshField": {
+										"value": {
+											"value": "@item().LastRefreshField",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"LoadType": {
+				"type": "string"
+			}
+		},
+		"annotations": []
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
