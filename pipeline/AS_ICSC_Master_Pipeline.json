@@ -97,6 +97,10 @@
 							"dependsOn": [],
 							"userProperties": [],
 							"typeProperties": {
+								"pipeline": {
+									"referenceName": "AS_ICSC_DataBricks_Execute_CSV_To_Parquet",
+									"type": "PipelineReference"
+								},
 								"waitOnCompletion": true
 							}
 						},
@@ -133,6 +137,10 @@
 							],
 							"userProperties": [],
 							"typeProperties": {
+								"pipeline": {
+									"referenceName": "AS_ICSC_Load_To_DWH",
+									"type": "PipelineReference"
+								},
 								"waitOnCompletion": true
 							}
 						}
